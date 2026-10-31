@@ -11,7 +11,13 @@ from extractor import (
     extract_product,
     extract_products_parallel,
 )
-from scraper import collect_products, login_to_flipkart, normalize_category_url, sort_products_by_price_high_to_low
+from scraper import (
+    collect_products,
+    login_to_flipkart,
+    normalize_category_url,
+    should_skip_login,
+    sort_products_by_price_high_to_low,
+)
 
 
 class NormalizeCategoryUrlTests(unittest.TestCase):
@@ -70,6 +76,57 @@ class NormalizeCategoryUrlTests(unittest.TestCase):
 
         self.assertEqual(_extract_discount_value(text), "52%")
         self.assertEqual(_extract_coupon_value(text), "Black Deal")
+
+    def test_extract_product_reads_discount_and_coupon_from_discount_badge_dom(self):
+        page = MagicMock()
+        page.title.return_value = "Sample Watch"
+
+        discount_badge = MagicMock()
+        discount_badge.inner_text.return_value = "84% off"
+        coupon_badge = MagicMock()
+        coupon_badge.inner_text.return_value = "with Black Deal"
+        body_locator = MagicMock(inner_text=MagicMock(return_value="₹ 3,999\n₹ 2,999\n84% off\nwith Black Deal"))
+
+        def mock_locator(selector, *args, **kwargs):
+            if selector == "body":
+                return body_locator
+            if selector == "div.v1zwn222.v1zwn20._1psv1zeb9._1psv1ze0._1psv1zeif":
+                locator = MagicMock()
+                locator.count.return_value = 1
+                locator.nth.return_value = discount_badge
+                return locator
+            if selector == "div[class*='Black Deal']":
+                locator = MagicMock()
+                locator.count.return_value = 1
+                locator.nth.return_value = coupon_badge
+                return locator
+            locator = MagicMock()
+            locator.count.return_value = 0
+            return locator
+
+        page.locator.side_effect = mock_locator
+
+        result = extract_product("https://example.com/watch", page=page)
+
+        self.assertEqual(result["discount"], "84%")
+        self.assertEqual(result["coupon"], "Black Deal")
+
+    def test_discount_is_none_when_discount_badge_is_absent(self):
+        page = MagicMock()
+        page.title.return_value = "Sample Watch"
+
+        def mock_locator(selector, *args, **kwargs):
+            if selector == "body":
+                return MagicMock(inner_text=MagicMock(return_value="₹ 3,999\n₹ 2,999\nBlack Deal"))
+            locator = MagicMock()
+            locator.count.return_value = 0
+            return locator
+
+        page.locator.side_effect = mock_locator
+
+        result = extract_product("https://example.com/watch", page=page)
+
+        self.assertIsNone(result["discount"])
 
     def test_price_block_tracks_discount_and_prices_without_numeric_columns(self):
         text = "5%\n₹15,795\n₹15,000\nwith Black Deal"
@@ -169,6 +226,10 @@ class LoginToFlipkartTests(unittest.TestCase):
         result = login_to_flipkart(ClosedPage(), wait_for_login_seconds=None)
 
         self.assertIsNotNone(result)
+
+    @patch.dict("os.environ", {"FLIPKART_LOGIN_REQUIRED": "false"}, clear=False)
+    def test_should_skip_login_returns_true_when_no_login_mode_is_selected(self):
+        self.assertTrue(should_skip_login())
 
     def test_sort_products_by_price_high_to_low_uses_sort_option(self):
         page = MagicMock()

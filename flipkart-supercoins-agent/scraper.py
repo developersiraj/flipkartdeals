@@ -91,8 +91,17 @@ def normalize_category_url(category):
     return f"https://www.flipkart.com/search?q={quote_plus(category)}"
 
 
-def login_to_flipkart(playwright_or_page, wait_for_login_seconds=None):
+def should_skip_login():
+    value = os.getenv("FLIPKART_LOGIN_REQUIRED", "true").strip().lower()
+    return value in {"0", "false", "no", "n", "skip", "off"}
+
+
+def login_to_flipkart(playwright_or_page, wait_for_login_seconds=None, require_login=True):
     """Open Flipkart and wait until the user is actually signed in before continuing."""
+    if require_login is False:
+        _log("Login disabled by FLIPKART_LOGIN_REQUIRED; continuing without Flipkart login.")
+        return playwright_or_page
+
     page = playwright_or_page
     browser = None
 

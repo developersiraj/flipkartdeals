@@ -39,6 +39,24 @@ else:
         ]
     _log(f"Loaded {len(categories)} categories from data/categories.txt")
 
+login_required = os.getenv("FLIPKART_LOGIN_REQUIRED")
+if login_required is None:
+    print("Choose Flipkart login mode:")
+    print("1) Login required")
+    print("2) No login (skip login)")
+    try:
+        choice = input("Enter 1 or 2: ").strip().lower()
+        if choice in {"2", "no", "skip", "n", "false", "0"}:
+            login_required = "false"
+        else:
+            login_required = "true"
+    except EOFError:
+        login_required = "true"
+    except KeyboardInterrupt:
+        login_required = "true"
+
+login_required = login_required not in {"0", "false", "no", "n", "skip", "off"}
+
 with sync_playwright() as p:
     _log("Launching Playwright browser session.")
     browser = p.chromium.launch(headless=False)
@@ -46,8 +64,11 @@ with sync_playwright() as p:
     results = []
 
     try:
-        _log("Starting Flipkart login sequence.")
-        login_to_flipkart(page, wait_for_login_seconds=None)
+        if login_required:
+            _log("Starting Flipkart login sequence.")
+            login_to_flipkart(page, wait_for_login_seconds=None)
+        else:
+            _log("Skipping Flipkart login because no-login mode was selected.")
 
         _log(f"Collecting product URLs with limit {MAX_PRODUCTS}.")
         urls = collect_products(categories, limit=MAX_PRODUCTS, page=page)

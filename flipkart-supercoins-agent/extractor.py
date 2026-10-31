@@ -70,25 +70,115 @@ def _extract_coupon_value(text):
     if not text:
         return None
 
-    patterns = [
-        r"(?:with\s+)?(?:Black Deal|Bank Offer|Coupon|Offer|Deal)",
-        r"(?:coupon|code|offer)\s*[:\-]?\s*([A-Za-z0-9]+)",
-        r"(?:get|use|apply)\s+([A-Za-z0-9]+)\s+(?:coupon|code)",
+    explicit_patterns = [
+        r"(?:with\s+)?(Black Deal|Bank Offer|No Cost EMI|Exchange Offer|Special Price)",
+        r"(?:coupon|code)\s*[:\-]?\s*([A-Za-z0-9]+)",
         r"(?:with\s+)?([A-Za-z0-9]+\s+Deal)",
     ]
 
-    for pattern in patterns:
+    for pattern in explicit_patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            value = match.group(0).strip()
+            value = match.group(1) if match.lastindex else match.group(0)
             if value.lower().startswith("with "):
-                return value[5:].strip()
-            return value
+                value = value[5:].strip()
+            return value.strip()
+
+    if re.search(r"\bOffer\b", text, re.IGNORECASE):
+        return "Offer"
     return None
+
+
+def _read_text_from_dom(locator):
+    try:
+        if hasattr(locator, "count") and callable(locator.count):
+            count = locator.count()
+            values = []
+            for index in range(count):
+                try:
+                    value = locator.nth(index).inner_text().strip()
+                    if value:
+                        values.append(value)
+                except Exception:
+                    continue
+            return values
+    except Exception:
+        pass
+
+    try:
+        value = locator.inner_text().strip()
+        if value:
+            return [value]
+    except Exception:
+        pass
+
+    return []
+
+
+def _page_is_closed(page):
+    if page is None:
+        return True
+    try:
+        return page.is_closed() is True
+    except Exception:
+        return False
+
+
+def _extract_discount_from_page(page):
+    if page is None or _page_is_closed(page):
+        return None
+
+    selector = "div.v1zwn222.v1zwn20._1psv1zeb9._1psv1ze0._1psv1zeif"
+    try:
+        locator = page.locator(selector)
+        for candidate in _read_text_from_dom(locator):
+            discount = _extract_discount_value(candidate)
+            if discount:
+                return discount
+    except Exception:
+        return None
+    return None
+
+
+def _extract_coupon_from_page(page, text):
+    if page is None or _page_is_closed(page):
+        return _extract_coupon_value(text)
+
+    selectors = [
+        "div.v1zwn222.v1zwn20._1psv1zeb9._1psv1ze0._1psv1zeif",
+        "div[class*='v1zwn22'][class*='_1psv1ze']",
+        "div[class*='v1zwn22']",
+        "div[class*='_1psv1ze']",
+        "div[class*='Black Deal']",
+    ]
+
+    for selector in selectors:
+        try:
+            locator = page.locator(selector)
+            for candidate in _read_text_from_dom(locator):
+                coupon = _extract_coupon_value(candidate)
+                if coupon:
+                    return coupon
+        except Exception:
+            continue
+    return _extract_coupon_value(text)
 
 
 def extract_product(url, page=None):
     _log(f"Extracting product data for: {url}")
+
+    if page is not None and _page_is_closed(page):
+        _log(f"Skipping extraction for closed page: {url}")
+        return {
+            "url": url,
+            "product": None,
+            "price": None,
+            "discount": None,
+            "actual_price": None,
+            "discount_price": None,
+            "coupon": None,
+            "supercoins": None,
+        }
 
     if page is None:
         with sync_playwright() as p:
@@ -102,7 +192,8 @@ def extract_product(url, page=None):
                 timeout=60000
             )
 
-            page.wait_for_timeout(3000)
+            if not _page_is_closed(page):
+                page.wait_for_timeout(3000)
 
             title = page.title()
             text = page.locator("body").inner_text()
@@ -114,8 +205,8 @@ def extract_product(url, page=None):
             )
 
             price_block = _extract_price_block(text)
-            discount_value = price_block["discount"]
-            coupon_value = _extract_coupon_value(text)
+            discount_value = _extract_discount_from_page(page)
+            coupon_value = _extract_coupon_from_page(page, text) or _extract_coupon_value(text)
 
             result = {
                 "url": url,
@@ -140,7 +231,8 @@ def extract_product(url, page=None):
         timeout=60000
     )
 
-    page.wait_for_timeout(3000)
+    if not _page_is_closed(page):
+        page.wait_for_timeout(3000)
 
     title = page.title()
     text = page.locator("body").inner_text()
@@ -152,8 +244,8 @@ def extract_product(url, page=None):
     )
 
     price_block = _extract_price_block(text)
-    discount_value = price_block["discount"]
-    coupon_value = _extract_coupon_value(text)
+    discount_value = _extract_discount_from_page(page)
+    coupon_value = _extract_coupon_from_page(page, text) or _extract_coupon_value(text)
 
     result = {
         "url": url,
