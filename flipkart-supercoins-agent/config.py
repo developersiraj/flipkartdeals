@@ -1,0 +1,7 @@
+MAX_PRODUCTS = 1000
+MAX_CATEGORIES = 50
+THREAD_WORKERS = 1
+
+HEADLESS = False
+
+OUTPUT_FILE = "output/supercoins_report.xlsx"

@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+
+# Node
+node_modules/
+package-lock.json
+
+# Project generated files
+output/
+*.xlsx
+*.xls
+*.csv
+
+# OS/editor
+.DS_Store
+Thumbs.db
