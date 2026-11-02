@@ -164,6 +164,28 @@ def _extract_coupon_from_page(page, text):
     return _extract_coupon_value(text)
 
 
+def _extract_price_from_page(page):
+    if page is None or _page_is_closed(page):
+        return None
+
+    selectors = [
+        "div.v1zwn21n.v1zwn20._1psv1zeb9._1psv1ze0",
+        "div[class*='v1zwn21n'][class*='_1psv1ze0']",
+        "div[class*='v1zwn21n']",
+    ]
+
+    for selector in selectors:
+        try:
+            locator = page.locator(selector)
+            for candidate in _read_text_from_dom(locator):
+                match = re.search(r"₹\s?[\d,]+", candidate)
+                if match:
+                    return match.group(0).strip()
+        except Exception:
+            continue
+    return None
+
+
 def extract_product(url, page=None):
     _log(f"Extracting product data for: {url}")
 
@@ -205,16 +227,17 @@ def extract_product(url, page=None):
             )
 
             price_block = _extract_price_block(text)
+            page_price = _extract_price_from_page(page)
             discount_value = _extract_discount_from_page(page)
             coupon_value = _extract_coupon_from_page(page, text) or _extract_coupon_value(text)
 
             result = {
                 "url": url,
                 "product": title,
-                "price": price_block["actual_price"] or price_block["discount_price"],
+                "price": page_price or price_block["actual_price"] or price_block["discount_price"],
                 "discount": discount_value,
-                "actual_price": price_block["actual_price"],
-                "discount_price": price_block["discount_price"],
+                "actual_price": price_block["actual_price"] or page_price,
+                "discount_price": price_block["discount_price"] or page_price,
                 "coupon": coupon_value,
                 "supercoins": int(coin_match.group(1))
                     if coin_match else None
@@ -244,16 +267,17 @@ def extract_product(url, page=None):
     )
 
     price_block = _extract_price_block(text)
+    page_price = _extract_price_from_page(page)
     discount_value = _extract_discount_from_page(page)
     coupon_value = _extract_coupon_from_page(page, text) or _extract_coupon_value(text)
 
     result = {
         "url": url,
         "product": title,
-        "price": price_block["actual_price"] or price_block["discount_price"],
+        "price": page_price or price_block["actual_price"] or price_block["discount_price"],
         "discount": discount_value,
-        "actual_price": price_block["actual_price"],
-        "discount_price": price_block["discount_price"],
+        "actual_price": price_block["actual_price"] or page_price,
+        "discount_price": price_block["discount_price"] or page_price,
         "coupon": coupon_value,
         "supercoins": int(coin_match.group(1))
             if coin_match else None

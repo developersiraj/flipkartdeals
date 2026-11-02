@@ -128,6 +128,29 @@ class NormalizeCategoryUrlTests(unittest.TestCase):
 
         self.assertIsNone(result["discount"])
 
+    def test_extract_product_uses_exact_price_badge_when_present(self):
+        page = MagicMock()
+        page.title.return_value = "Sample Watch"
+
+        def mock_locator(selector, *args, **kwargs):
+            if selector == "body":
+                return MagicMock(inner_text=MagicMock(return_value="₹ 59,990\n₹ 49,990\n37% off\nBlack Deal"))
+            if selector == "div.v1zwn21n.v1zwn20._1psv1zeb9._1psv1ze0":
+                locator = MagicMock()
+                locator.count.return_value = 1
+                locator.nth.return_value.inner_text.return_value = "₹49,990"
+                return locator
+            locator = MagicMock()
+            locator.count.return_value = 0
+            return locator
+
+        page.locator.side_effect = mock_locator
+
+        result = extract_product("https://example.com/watch", page=page)
+
+        self.assertEqual(result["price"], "₹49,990")
+        self.assertIsNone(result["discount"])
+
     def test_price_block_tracks_discount_and_prices_without_numeric_columns(self):
         text = "5%\n₹15,795\n₹15,000\nwith Black Deal"
 
